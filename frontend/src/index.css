@@ -1,0 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    margin: 0;
+    font-family: "Inter", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #FAF8F5;
+    color: #1F2421;
+}
+
+@layer base {
+    :root {
+        --background: 40 33% 97%;
+        --foreground: 150 8% 13%;
+        --card: 0 0% 100%;
+        --card-foreground: 150 8% 13%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 150 8% 13%;
+        --primary: 13 68% 54%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 36 27% 93%;
+        --secondary-foreground: 150 8% 13%;
+        --muted: 36 27% 93%;
+        --muted-foreground: 145 6% 45%;
+        --accent: 13 80% 96%;
+        --accent-foreground: 13 68% 40%;
+        --destructive: 0 72% 51%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 33 25% 87%;
+        --input: 33 25% 87%;
+        --ring: 13 68% 54%;
+        --radius: 0.75rem;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+    ::selection {
+        background: #D95D39;
+        color: #fff;
+    }
+}
+
+.font-heading { font-family: "Plus Jakarta Sans", sans-serif; }
+.font-mono-num { font-family: "JetBrains Mono", monospace; }
+
+/* thin scrollbars for dense tables */
+.thin-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
+.thin-scroll::-webkit-scrollbar-thumb { background: #E6DFD5; border-radius: 8px; }
+.thin-scroll::-webkit-scrollbar-thumb:hover { background: #D5CBBD; }

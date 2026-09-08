@@ -1,0 +1,163 @@
+{
+  "project_name": "PetaPembeli",
+  "app_type": "hybrid_fullstack",
+  "archetype": "Organic & Earthy / Warm Modern",
+  "language": "Bahasa Indonesia",
+  "identity_and_mission": {
+    "persona": "E1 Creative Design System with Organic & Earthy Warm Modern Polish",
+    "mission": "Provide an effortless, warm, human-centered UI for Indonesian TikTok Shop sellers to turn messy order detail screenshots into a structured, deduplicated customer database (Database Pelanggan) with inline AI OCR quick-corrections.",
+    "emotional_tone": "Warm, trustworthy, efficient, approachable, and crisp.",
+    "design_principles": [
+      "Tactile Warmth over Cold Tech: Use rich off-white background (#FAF8F5), deep charcoal typography (#1F2421), and earthy terracotta accent (#D95D39).",
+      "Inline Control & Clarity: Allow immediate inline editing for low-confidence AI extraction fields before commit.",
+      "Density where appropriate: Mobile-first responsive touch layout for upload and extraction; dense, scannable data grid for desktop customer database.",
+      "Strict Indonesian Context: Rupiah currency formatting, Indonesian date/time standard (DD/MM/YYYY HH:MM:SS / 14 Juli 2026), and authentic Bahasa Indonesia terminology."
+    ]
+  },
+  "colors": {
+    "theme": "Light Warm Modern",
+    "background": "#FAF8F5",
+    "surface": "#FFFFFF",
+    "surface_subtle": "#F4F0EA",
+    "surface_hover": "#EFEAE1",
+    "border": "#E6DFD5",
+    "border_focus": "#D95D39",
+    "text_primary": "#1F2421",
+    "text_secondary": "#576058",
+    "text_muted": "#8A948B",
+    "primary_accent": "#D95D39",
+    "primary_accent_hover": "#C24C2A",
+    "primary_accent_subtle": "#FDF0EC",
+    "secondary_accent": "#2B5041",
+    "secondary_accent_subtle": "#EBF2EE",
+    "warning_amber": "#D97706",
+    "warning_subtle": "#FEF3C7",
+    "success_emerald": "#059669",
+    "success_subtle": "#D1FAE5",
+    "badge_repeat_bg": "#FEF3C7",
+    "badge_repeat_text": "#B45309",
+    "badge_repeat_border": "#FDE68A",
+    "confidence_low_bg": "#FEF2F2",
+    "confidence_low_text": "#DC2626",
+    "confidence_low_border": "#FECACA"
+  },
+  "typography": {
+    "heading_font": "Plus Jakarta Sans, sans-serif",
+    "body_font": "Inter, sans-serif",
+    "mono_font": "JetBrains Mono, monospace",
+    "scale": {
+      "hero_heading": "text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-[#1F2421]",
+      "section_heading": "text-2xl sm:text-3xl font-bold tracking-tight text-[#1F2421]",
+      "card_heading": "text-lg sm:text-xl font-semibold text-[#1F2421]",
+      "subheading": "text-sm sm:text-base font-medium text-[#576058]",
+      "body": "text-sm sm:text-base text-[#1F2421] leading-relaxed",
+      "table_text": "text-xs sm:text-sm text-[#1F2421]",
+      "badge": "text-xs font-semibold tracking-wide uppercase px-2.5 py-0.5 rounded-full"
+    }
+  },
+  "layout_and_spacing": {
+    "main_container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8",
+    "grid_bento": "grid grid-cols-1 md:grid-cols-12 gap-6",
+    "card_padding": "p-5 sm:p-6",
+    "table_padding": "px-4 py-3.5",
+    "mobile_upload_height": "max-h-[80vh]",
+    "corner_radius": {
+      "card": "rounded-2xl",
+      "button": "rounded-xl",
+      "input": "rounded-xl",
+      "badge": "rounded-full"
+    }
+  },
+  "components_and_features": {
+    "auth": {
+      "screen_name": "Login & Kelola Operator",
+      "description": "Simple email + password authentication with role-based features (Pemilik / Owner vs Operator). Owner can manage and create extra operator accounts.",
+      "components": ["Card", "Input", "Button", "Badge", "Dialog", "Table"]
+    },
+    "upload_and_extraction": {
+      "screen_name": "Upload & Ekstraksi",
+      "description": "Multi-image drag-and-drop zone supporting phone screenshots of TikTok Shop order detail pages. Real-time AI extraction status cards with image thumbnail previews.",
+      "fields_extracted": [
+        "order_id (ID Pesanan)",
+        "created_at (Waktu Pembuatan DD/MM/YYYY HH:MM:SS)",
+        "tiktok_username (Handle pembeli di bawah Pembeli)",
+        "recipient_name (Nama di bawah Alamat pengiriman)",
+        "phone (Normalisasi otomatis ke +62...)",
+        "full_address_raw (Alamat Lengkap Mentah)",
+        "affiliate_creator (Kreator Afiliasi / Penerima Komisi)",
+        "Parsed address components: address_detail, kelurahan, kecamatan, kota, provinsi, negara"
+      ],
+      "quick_correct_table": {
+        "title": "Tabel Tinjauan & Koreksi Cepat (Quick-Correct)",
+        "description": "Inline editable table with confidence indicators. Highlights low-certainty AI fields in warm reddish-amber so user can fix misreads before saving.",
+        "actions": ["Edit Inline", "Tandai Terverifikasi", "Simpan ke Database", "Hapus Hasil"]
+      }
+    },
+    "database_pelanggan": {
+      "screen_name": "Database Pelanggan",
+      "description": "Searchable, filterable customer list deduplicated by normalized phone number (+62). Updates order_count, last_seen, retains first_seen, and marks repeat buyers with 'Pembeli Berulang' badge.",
+      "columns": [
+        "recipient_name (Nama Penerima)",
+        "tiktok_username (Username TikTok)",
+        "phone (Nomor HP / WhatsApp)",
+        "kecamatan (Kecamatan)",
+        "kota (Kota/Kabupaten)",
+        "provinsi (Provinsi)",
+        "affiliate_creator (Kreator Afiliasi)",
+        "order_count (Total Pesanan)",
+        "first_seen (Pesanan Pertama)",
+        "last_seen (Pesanan Terakhir)",
+        "status (Badge Pembeli Berulang / Baru)"
+      ],
+      "filters": ["Pencarian Nama / HP / TikTok Username", "Filter Provinsi / Kota", "Filter Kreator Afiliasi", "Toggle Pembeli Berulang Only"]
+    },
+    "operator_management": {
+      "screen_name": "Manajemen Operator (Pemilik)",
+      "description": "Modal or tab accessible by Owner account to invite/create operator accounts with email and password.",
+      "actions": ["Tambah Operator Baru", "Nonaktifkan Akun Operator", "Lihat Riwayat Ekstraksi Operator"]
+    }
+  },
+  "interactive_feedback_and_motion": {
+    "toast_notifications": "Use Sonner toast notifications in Bahasa Indonesia (e.g. 'Berhasil mengekstrak 3 gambar', 'Data pembeli berhasil disimpan ke database').",
+    "drag_and_drop_state": "Visual highlight border (#D95D39) with soft background pulse on hover/dragover.",
+    "button_animations": "Active scale down (active:scale-[0.98]), hover brightness change (hover:bg-[#C24C2A]), smooth transition (transition-all duration-200).",
+    "loading_states": "Skeleton loaders for database tables, pulsating progress bars per uploaded image during AI vision OCR processing."
+  },
+  "test_attributes": {
+    "requirement": "All interactive elements, inputs, buttons, tables, badges, and status blocks MUST include a kebab-case data-testid attribute.",
+    "examples": {
+      "login_email_input": "data-testid=\"login-email-input\"",
+      "login_submit_button": "data-testid=\"login-submit-button\"",
+      "nav_upload_link": "data-testid=\"nav-upload-link\"",
+      "nav_database_link": "data-testid=\"nav-database-link\"",
+      "nav_operators_link": "data-testid=\"nav-operators-link\"",
+      "upload_dropzone": "data-testid=\"upload-dropzone\"",
+      "upload_file_input": "data-testid=\"upload-file-input\"",
+      "start_extraction_button": "data-testid=\"start-extraction-button\"",
+      "quick_correct_table": "data-testid=\"quick-correct-table\"",
+      "save_database_button": "data-testid=\"save-database-button\"",
+      "customer_search_input": "data-testid=\"customer-search-input\"",
+      "customer_table": "data-testid=\"customer-table\"",
+      "repeat_buyer_badge": "data-testid=\"repeat-buyer-badge\"",
+      "operator_create_button": "data-testid=\"operator-create-button\""
+    }
+  },
+  "instructions_to_main_agent": [
+    "1. Read this design_guidelines.json completely before building.",
+    "2. All interface text must strictly be in Bahasa Indonesia (e.g., 'Upload & Ekstraksi', 'Database Pelanggan', 'Kelola Operator', 'ID Pesanan', 'Pembeli Berulang', 'Koreksi Cepat').",
+    "3. Set up the exact warm modern color palette in CSS variables / Tailwind config: Off-white background #FAF8F5, Charcoal text #1F2421, Terracotta accent #D95D39.",
+    "4. Ensure phone numbers are normalized to +62 format (e.g. 081234567890 -> +6281234567890).",
+    "5. Address parser must split full_address_raw into address_detail, kelurahan, kecamatan, kota, provinsi, negara.",
+    "6. Build simulated or OpenAI Vision API based OCR extraction pipeline that accurately extracts fields from uploaded screenshots with simulated or real confidence scores.",
+    "7. Low confidence fields (<0.85 score) must show warning highlighting and warning badges in the Quick-Correct review table.",
+    "8. Deduplicate buyers in Database Pelanggan by phone number (+62). Increments order_count, keeps earliest first_seen, updates last_seen, and marks is_repeat=True when order_count > 1.",
+    "9. Include data-testid on every button, input, table cell, filter, modal, and badge.",
+    "10. Do not use external APIs or live TikTok scraping. Everything is screenshot OCR extraction -> Quick Correct -> Database Pelanggan."
+  ],
+  "universal_guidelines": {
+    "do_not_center_app": "Do NOT apply global text-align: center on app container.",
+    "no_emoji_icons": "Do NOT use AI emoji characters as UI icons. Use lucide-react icons.",
+    "contrast": "Ensure text contrast meets APCA/WCAG standards on #FAF8F5 background.",
+    "hover_states": "Always specify explicit hover text color alongside background hover colors."
+  }
+}
