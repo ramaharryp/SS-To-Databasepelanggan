@@ -497,7 +497,8 @@ def to_oid(customer_id: str) -> ObjectId:
         raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan")
 
 
-def build_customer_query(search: str, provinsi: str, kota: str, affiliate: str, repeat_only: bool, label: str = "") -> dict:
+def build_customer_query(search: str, provinsi: str, kota: str, affiliate: str, repeat_only: bool,
+                         label: str = "", date_field: str = "first_seen", date_from: str = "", date_to: str = "") -> dict:
     query = {}
     if search:
         rx = {"$regex": re.escape(search), "$options": "i"}
@@ -516,6 +517,14 @@ def build_customer_query(search: str, provinsi: str, kota: str, affiliate: str, 
         query["labels"] = label
     if repeat_only:
         query["is_repeat"] = True
+    field = "last_seen" if date_field == "last_seen" else "first_seen"
+    rng = {}
+    if date_from:
+        rng["$gte"] = f"{date_from}T00:00:00"
+    if date_to:
+        rng["$lte"] = f"{date_to}T23:59:59.999999"
+    if rng:
+        query[field] = rng
     return query
 
 
@@ -528,8 +537,11 @@ async def list_customers(
     affiliate: str = "",
     label: str = "",
     repeat_only: bool = False,
+    date_field: str = "first_seen",
+    date_from: str = "",
+    date_to: str = "",
 ):
-    query = build_customer_query(search, provinsi, kota, affiliate, repeat_only, label)
+    query = build_customer_query(search, provinsi, kota, affiliate, repeat_only, label, date_field, date_from, date_to)
     docs = await db.customers.find(query).sort("last_seen", -1).to_list(2000)
     out = []
     for d in docs:
@@ -615,8 +627,11 @@ async def export_customers(
     affiliate: str = "",
     label: str = "",
     repeat_only: bool = False,
+    date_field: str = "first_seen",
+    date_from: str = "",
+    date_to: str = "",
 ):
-    query = build_customer_query(search, provinsi, kota, affiliate, repeat_only, label)
+    query = build_customer_query(search, provinsi, kota, affiliate, repeat_only, label, date_field, date_from, date_to)
     docs = await db.customers.find(query).sort("last_seen", -1).to_list(5000)
     rows = []
     for d in docs:
