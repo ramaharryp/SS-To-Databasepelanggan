@@ -4,8 +4,25 @@ import api, { formatApiErrorDetail } from "../lib/api";
 import { formatDateShortID, formatDateID } from "../lib/format";
 import {
   Search, RefreshCw, Users, Repeat, Package, Filter, Download, MessageCircle,
-  Pencil, Trash2, X, Loader2, ChevronRight, MapPin,
+  Pencil, Trash2, X, Loader2, ChevronRight, MapPin, Tag, BarChart3, StickyNote,
 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+
+export const LABEL_OPTIONS = [
+  { name: "VIP", chip: "bg-amber-100 text-amber-700 border-amber-200", dot: "#D97706" },
+  { name: "Reseller", chip: "bg-pine-subtle text-pine border-pine/20", dot: "#2B5041" },
+  { name: "Langganan", chip: "bg-terracotta-subtle text-terracotta border-terracotta/20", dot: "#D95D39" },
+  { name: "Prospek", chip: "bg-sky-100 text-sky-700 border-sky-200", dot: "#0284C7" },
+  { name: "Bermasalah", chip: "bg-red-100 text-red-700 border-red-200", dot: "#DC2626" },
+];
+
+const LABEL_MAP = Object.fromEntries(LABEL_OPTIONS.map((l) => [l.name, l]));
+const CHART_COLORS = ["#D95D39", "#2B5041", "#D97706", "#0284C7", "#8A948B", "#C24C2A", "#059669", "#B45309", "#576058", "#DC2626", "#2563EB", "#7C3AED"];
+
+function LabelBadge({ name }) {
+  const conf = LABEL_MAP[name] || { chip: "bg-surface-subtle text-ink-soft border-line" };
+  return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${conf.chip}`}>{name}</span>;
+}
 
 function StatCard({ icon: Icon, label, value, tone }) {
   const tones = {
@@ -46,10 +63,14 @@ export default function Database() {
   const [provinsi, setProvinsi] = useState("");
   const [kota, setKota] = useState("");
   const [affiliate, setAffiliate] = useState("");
+  const [labelFilter, setLabelFilter] = useState("");
   const [repeatOnly, setRepeatOnly] = useState(false);
-  const [filters, setFilters] = useState({ provinsi: [], kota: [], affiliate: [] });
+  const [filters, setFilters] = useState({ provinsi: [], kota: [], affiliate: [], labels: [] });
   const [stats, setStats] = useState({ total_customers: 0, repeat_customers: 0, total_orders: 0 });
   const [exporting, setExporting] = useState(false);
+  const [regionBy, setRegionBy] = useState("provinsi");
+  const [regions, setRegions] = useState([]);
+  const [showRegions, setShowRegions] = useState(false);
 
   const [editing, setEditing] = useState(null); // customer object
   const [savingEdit, setSavingEdit] = useState(false);
@@ -59,8 +80,8 @@ export default function Database() {
   const [history, setHistory] = useState(null);
 
   const buildParams = useCallback(
-    () => ({ search, provinsi, kota, affiliate, repeat_only: repeatOnly }),
-    [search, provinsi, kota, affiliate, repeatOnly]
+    () => ({ search, provinsi, kota, affiliate, label: labelFilter, repeat_only: repeatOnly }),
+    [search, provinsi, kota, affiliate, labelFilter, repeatOnly]
   );
 
   const load = useCallback(async () => {
@@ -87,6 +108,11 @@ export default function Database() {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
   }, [load]);
+
+  useEffect(() => {
+    if (!showRegions) return;
+    api.get("/stats/regions", { params: { by: regionBy } }).then(({ data }) => setRegions(data)).catch(() => setRegions([]));
+  }, [showRegions, regionBy, stats.total_customers]);
 
   const exportData = async (format) => {
     setExporting(true);
@@ -200,6 +226,59 @@ export default function Database() {
         <StatCard icon={Package} label="Total Pesanan" value={stats.total_orders} tone="pine" />
       </div>
 
+      {/* Region summary */}
+      <div className="rounded-2xl border border-line bg-surface">
+        <button
+          onClick={() => setShowRegions((v) => !v)}
+          data-testid="toggle-regions-button"
+          className="flex w-full items-center justify-between px-4 sm:px-5 py-4 text-left"
+        >
+          <span className="flex items-center gap-2 font-heading text-base font-semibold text-ink">
+            <BarChart3 className="h-4.5 w-4.5 text-terracotta" /> Ringkasan Wilayah
+          </span>
+          <span className="flex items-center gap-1 text-sm font-medium text-ink-muted">
+            {showRegions ? "Sembunyikan" : "Tampilkan grafik"}
+            <ChevronRight className={`h-4 w-4 transition-transform ${showRegions ? "rotate-90" : ""}`} />
+          </span>
+        </button>
+        {showRegions && (
+          <div className="px-4 sm:px-5 pb-5 border-t border-line pt-4" data-testid="regions-panel">
+            <div className="mb-4 inline-flex rounded-xl border border-line bg-surface-subtle p-0.5">
+              {[["provinsi", "Per Provinsi"], ["kota", "Per Kota/Kab."]].map(([val, lbl]) => (
+                <button
+                  key={val}
+                  onClick={() => setRegionBy(val)}
+                  data-testid={`region-by-${val}`}
+                  className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-all ${regionBy === val ? "bg-surface text-terracotta shadow-sm" : "text-ink-soft hover:text-ink"}`}
+                >
+                  {lbl}
+                </button>
+              ))}
+            </div>
+            {regions.length === 0 ? (
+              <p className="py-10 text-center text-sm text-ink-muted">Belum ada data wilayah.</p>
+            ) : (
+              <div style={{ width: "100%", height: Math.max(200, regions.length * 38) }}>
+                <ResponsiveContainer>
+                  <BarChart data={regions} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12, fill: "#8A948B" }} axisLine={false} tickLine={false} />
+                    <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 12, fill: "#1F2421" }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      cursor={{ fill: "#F4F0EA" }}
+                      contentStyle={{ borderRadius: 12, border: "1px solid #E6DFD5", fontSize: 12 }}
+                      formatter={(v, n) => [v, n === "count" ? "Pelanggan" : "Pesanan"]}
+                    />
+                    <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={20}>
+                      {regions.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Filters */}
       <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5 space-y-3">
         <div className="relative">
@@ -226,6 +305,10 @@ export default function Database() {
             <option value="">Semua Kreator</option>
             {filters.affiliate.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
+          <select data-testid="filter-label" value={labelFilter} onChange={(e) => setLabelFilter(e.target.value)} className={selectCls}>
+            <option value="">Semua Label</option>
+            {filters.labels.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
           <button
             data-testid="filter-repeat-toggle"
             onClick={() => setRepeatOnly((v) => !v)}
@@ -235,9 +318,9 @@ export default function Database() {
           >
             <Repeat className="h-4 w-4" /> Pembeli Berulang
           </button>
-          {(search || provinsi || kota || affiliate || repeatOnly) && (
+          {(search || provinsi || kota || affiliate || labelFilter || repeatOnly) && (
             <button
-              onClick={() => { setSearch(""); setProvinsi(""); setKota(""); setAffiliate(""); setRepeatOnly(false); }}
+              onClick={() => { setSearch(""); setProvinsi(""); setKota(""); setAffiliate(""); setLabelFilter(""); setRepeatOnly(false); }}
               className="text-sm font-medium text-ink-muted hover:text-terracotta"
             >
               Reset
@@ -251,7 +334,7 @@ export default function Database() {
         <table data-testid="customer-table" className="w-full border-collapse text-sm">
           <thead>
             <tr className="bg-surface-subtle text-left">
-              {["Nama Penerima", "Username TikTok", "No. HP", "Kecamatan", "Kota/Kab.", "Provinsi", "Kreator Afiliasi", "Pesanan", "Pertama", "Terakhir", "Status", "Aksi"].map((h) => (
+              {["Nama Penerima", "Username TikTok", "No. HP", "Kecamatan", "Kota/Kab.", "Provinsi", "Kreator Afiliasi", "Label", "Pesanan", "Pertama", "Terakhir", "Status", "Aksi"].map((h) => (
                 <th key={h} className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-ink-soft whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -260,14 +343,14 @@ export default function Database() {
             {loading ? (
               [...Array(6)].map((_, i) => (
                 <tr key={i} className="border-t border-line">
-                  {[...Array(12)].map((__, j) => (
+                  {[...Array(13)].map((__, j) => (
                     <td key={j} className="px-4 py-4"><div className="h-3.5 w-full max-w-[100px] animate-pulse rounded bg-surface-hover" /></td>
                   ))}
                 </tr>
               ))
             ) : customers.length === 0 ? (
               <tr>
-                <td colSpan={12} className="px-4 py-16 text-center">
+                <td colSpan={13} className="px-4 py-16 text-center">
                   <Users className="mx-auto h-8 w-8 text-ink-muted/50" />
                   <p className="mt-3 font-heading font-semibold text-ink">Belum ada pelanggan</p>
                   <p className="mt-1 text-sm text-ink-muted">Unggah screenshot di menu "Upload & Ekstraksi" untuk mulai membangun database.</p>
@@ -306,6 +389,20 @@ export default function Database() {
                   <td className="px-4 py-3.5 text-ink-soft whitespace-nowrap">{c.kota || "-"}</td>
                   <td className="px-4 py-3.5 text-ink-soft whitespace-nowrap">{c.provinsi || "-"}</td>
                   <td className="px-4 py-3.5 text-ink-soft whitespace-nowrap">{c.affiliate_creator || "-"}</td>
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    <div className="flex items-center gap-1.5">
+                      {(c.labels && c.labels.length > 0) ? (
+                        <span className="flex flex-wrap gap-1" data-testid={`labels-${i}`}>
+                          {c.labels.map((l) => <LabelBadge key={l} name={l} />)}
+                        </span>
+                      ) : <span className="text-ink-muted/50">—</span>}
+                      {c.note && (
+                        <span title={c.note} data-testid={`note-indicator-${i}`} className="text-ink-muted">
+                          <StickyNote className="h-3.5 w-3.5" />
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-3.5 text-center font-mono-num font-semibold text-ink">{c.order_count}</td>
                   <td className="px-4 py-3.5 text-ink-muted whitespace-nowrap">{formatDateShortID(c.first_seen)}</td>
                   <td className="px-4 py-3.5 text-ink-muted whitespace-nowrap">{formatDateShortID(c.last_seen)}</td>
@@ -357,6 +454,15 @@ export default function Database() {
               <div>
                 <h2 className="font-heading text-lg font-bold text-ink">Riwayat Pesanan</h2>
                 <p className="text-sm text-ink-soft">{historyFor.recipient_name} · {historyFor.tiktok_username}</p>
+                {historyFor.labels && historyFor.labels.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">{historyFor.labels.map((l) => <LabelBadge key={l} name={l} />)}</div>
+                )}
+                {historyFor.note && (
+                  <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+                    <StickyNote className="mt-0.5 h-3 w-3 shrink-0" />
+                    <span>{historyFor.note}</span>
+                  </div>
+                )}
               </div>
               <button onClick={() => setHistoryFor(null)} className="text-ink-muted hover:text-ink"><X className="h-5 w-5" /></button>
             </div>
@@ -420,6 +526,40 @@ export default function Database() {
                   )}
                 </div>
               ))}
+              <div className="sm:col-span-2">
+                <label className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-2"><Tag className="h-3.5 w-3.5" /> Label Pelanggan</label>
+                <div className="flex flex-wrap gap-2">
+                  {LABEL_OPTIONS.map((opt) => {
+                    const active = (editing.labels || []).includes(opt.name);
+                    return (
+                      <button
+                        type="button"
+                        key={opt.name}
+                        data-testid={`edit-label-${opt.name}`}
+                        onClick={() => {
+                          const cur = editing.labels || [];
+                          setEditing({ ...editing, labels: active ? cur.filter((l) => l !== opt.name) : [...cur, opt.name] });
+                        }}
+                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all active:scale-[0.97] ${active ? opt.chip : "border-line bg-surface text-ink-muted hover:border-ink/30"}`}
+                      >
+                        <span className="h-2 w-2 rounded-full" style={{ background: opt.dot }} />
+                        {opt.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-1.5"><StickyNote className="h-3.5 w-3.5" /> Catatan</label>
+                <textarea
+                  data-testid="edit-field-note"
+                  value={editing.note || ""}
+                  onChange={(e) => setEditing({ ...editing, note: e.target.value })}
+                  rows={2}
+                  placeholder="Info pengiriman, preferensi packing, dll."
+                  className="w-full resize-y rounded-xl border border-line bg-paper px-3 py-2.5 text-sm text-ink outline-none focus:border-terracotta focus:ring-2 focus:ring-terracotta/20"
+                />
+              </div>
               {editError && <div className="sm:col-span-2 rounded-xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600">{editError}</div>}
               <div className="sm:col-span-2 flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink-soft hover:border-terracotta hover:text-terracotta">Batal</button>

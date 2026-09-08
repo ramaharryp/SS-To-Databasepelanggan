@@ -35,6 +35,7 @@ export default function Upload() {
   const [files, setFiles] = useState([]); // {id, file, preview}
   const [dragOver, setDragOver] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [rows, setRows] = useState(null); // extracted review rows
   const [saving, setSaving] = useState(false);
   const inputRef = useRef(null);
@@ -58,23 +59,34 @@ export default function Upload() {
 
   const removeFile = (id) => setFiles((prev) => prev.filter((f) => f.id !== id));
 
+  const CHUNK = 5;
+
   const startExtraction = async () => {
     if (files.length === 0) return;
     setExtracting(true);
+    setProgress({ done: 0, total: files.length });
+    const collected = [];
     try {
-      const images = await Promise.all(files.map((f) => fileToDataUrl(f.file)));
-      const { data } = await api.post("/extract", { images });
-      const reviewRows = data.results.map((r, i) => ({
-        _rid: files[i]?.id || `r-${i}`,
-        preview: files[i]?.preview,
-        fields: r.fields,
-        confidence: r.confidence,
-        verified: false,
-        error: r.error,
-      }));
-      setRows(reviewRows);
-      const ok = reviewRows.filter((r) => !r.error).length;
-      toast.success(`Berhasil mengekstrak ${ok} dari ${reviewRows.length} gambar`);
+      for (let start = 0; start < files.length; start += CHUNK) {
+        const batch = files.slice(start, start + CHUNK);
+        const images = await Promise.all(batch.map((f) => fileToDataUrl(f.file)));
+        const { data } = await api.post("/extract", { images });
+        data.results.forEach((r, j) => {
+          const src = batch[j];
+          collected.push({
+            _rid: src?.id || `r-${start + j}`,
+            preview: src?.preview,
+            fields: r.fields,
+            confidence: r.confidence,
+            verified: false,
+            error: r.error,
+          });
+        });
+        setProgress({ done: Math.min(start + CHUNK, files.length), total: files.length });
+      }
+      setRows(collected);
+      const ok = collected.filter((r) => !r.error).length;
+      toast.success(`Berhasil mengekstrak ${ok} dari ${collected.length} gambar`);
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Gagal mengekstrak gambar");
     } finally {
@@ -165,7 +177,7 @@ export default function Upload() {
             </div>
             <p className="mt-4 font-heading text-lg font-semibold text-ink">Seret gambar ke sini</p>
             <p className="mt-1 text-sm text-ink-soft">atau klik untuk memilih dari perangkat Anda (bisa banyak sekaligus)</p>
-            <p className="mt-3 text-xs text-ink-muted">Format PNG / JPG • Maksimal 30 gambar</p>
+            <p className="mt-3 text-xs text-ink-muted">Format PNG / JPG • Hingga 60 gambar per antrean</p>
           </div>
 
           {files.length > 0 && (
@@ -192,6 +204,22 @@ export default function Upload() {
                   </div>
                 ))}
               </div>
+
+              {extracting && (
+                <div className="mt-5" data-testid="extraction-progress">
+                  <div className="flex items-center justify-between text-xs font-medium text-ink-soft mb-1.5">
+                    <span>Mengekstrak antrean...</span>
+                    <span className="font-mono-num">{progress.done}/{progress.total}</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-surface-hover">
+                    <div
+                      className="h-full rounded-full bg-terracotta transition-all duration-300"
+                      style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               <button
                 data-testid="start-extraction-button"
                 onClick={startExtraction}

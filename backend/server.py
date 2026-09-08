@@ -296,6 +296,8 @@ class CustomerUpdate(BaseModel):
     kota: str = ""
     provinsi: str = ""
     negara: str = ""
+    note: str = ""
+    labels: List[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -385,9 +387,15 @@ async def toggle_operator(operator_id: str, user: dict = Depends(require_owner))
 async def extract(body: ExtractRequest, user: dict = Depends(get_current_user)):
     if not body.images:
         raise HTTPException(status_code=400, detail="Tidak ada gambar untuk diekstrak")
-    if len(body.images) > 30:
-        raise HTTPException(status_code=400, detail="Maksimal 30 gambar per unggahan")
-    tasks = [extract_one(img, i) for i, img in enumerate(body.images)]
+    if len(body.images) > 60:
+        raise HTTPException(status_code=400, detail="Maksimal 60 gambar per antrean")
+    sem = asyncio.Semaphore(5)
+
+    async def run(img, i):
+        async with sem:
+            return await extract_one(img, i)
+
+    tasks = [run(img, i) for i, img in enumerate(body.images)]
     results = await asyncio.gather(*tasks)
     results.sort(key=lambda r: r["index"])
     return {"results": results}
@@ -469,6 +477,8 @@ async def save_customers(body: SaveRequest, user: dict = Depends(get_current_use
                 "is_repeat": False,
                 "first_seen": now.isoformat(),
                 "last_seen": now.isoformat(),
+                "note": "",
+                "labels": [],
                 "created_by": user["email"],
             }
             res = await db.customers.insert_one(cust)
@@ -487,7 +497,7 @@ def to_oid(customer_id: str) -> ObjectId:
         raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan")
 
 
-def build_customer_query(search: str, provinsi: str, kota: str, affiliate: str, repeat_only: bool) -> dict:
+def build_customer_query(search: str, provinsi: str, kota: str, affiliate: str, repeat_only: bool, label: str = "") -> dict:
     query = {}
     if search:
         rx = {"$regex": re.escape(search), "$options": "i"}
@@ -502,6 +512,8 @@ def build_customer_query(search: str, provinsi: str, kota: str, affiliate: str, 
         query["kota"] = kota
     if affiliate:
         query["affiliate_creator"] = affiliate
+    if label:
+        query["labels"] = label
     if repeat_only:
         query["is_repeat"] = True
     return query
@@ -514,9 +526,10 @@ async def list_customers(
     provinsi: str = "",
     kota: str = "",
     affiliate: str = "",
+    label: str = "",
     repeat_only: bool = False,
 ):
-    query = build_customer_query(search, provinsi, kota, affiliate, repeat_only)
+    query = build_customer_query(search, provinsi, kota, affiliate, repeat_only, label)
     docs = await db.customers.find(query).sort("last_seen", -1).to_list(2000)
     out = []
     for d in docs:
@@ -534,6 +547,8 @@ async def list_customers(
             "affiliate_creator": d.get("affiliate_creator", ""),
             "order_count": d.get("order_count", 1),
             "is_repeat": d.get("is_repeat", False),
+            "note": d.get("note", ""),
+            "labels": d.get("labels", []) or [],
             "first_seen": d.get("first_seen", ""),
             "last_seen": d.get("last_seen", ""),
         })
@@ -545,7 +560,21 @@ async def customer_filters(user: dict = Depends(get_current_user)):
     provinsi = [p for p in await db.customers.distinct("provinsi") if p]
     kota = [k for k in await db.customers.distinct("kota") if k]
     affiliate = [a for a in await db.customers.distinct("affiliate_creator") if a]
-    return {"provinsi": sorted(provinsi), "kota": sorted(kota), "affiliate": sorted(affiliate)}
+    labels = [l for l in await db.customers.distinct("labels") if l]
+    return {"provinsi": sorted(provinsi), "kota": sorted(kota), "affiliate": sorted(affiliate), "labels": sorted(labels)}
+
+
+@api_router.get("/stats/regions")
+async def region_stats(user: dict = Depends(get_current_user), by: str = "provinsi"):
+    field = "kota" if by == "kota" else "provinsi"
+    pipeline = [
+        {"$match": {field: {"$nin": ["", None]}}},
+        {"$group": {"_id": f"${field}", "count": {"$sum": 1}, "orders": {"$sum": "$order_count"}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 12},
+    ]
+    docs = await db.customers.aggregate(pipeline).to_list(50)
+    return [{"name": d["_id"], "count": d["count"], "orders": d.get("orders", 0)} for d in docs]
 
 
 @api_router.get("/stats")
@@ -569,6 +598,8 @@ EXPORT_COLUMNS = [
     ("affiliate_creator", "Kreator Afiliasi"),
     ("order_count", "Total Pesanan"),
     ("is_repeat", "Pembeli Berulang"),
+    ("labels", "Label"),
+    ("note", "Catatan"),
     ("first_seen", "Pesanan Pertama"),
     ("last_seen", "Pesanan Terakhir"),
 ]
@@ -582,18 +613,21 @@ async def export_customers(
     provinsi: str = "",
     kota: str = "",
     affiliate: str = "",
+    label: str = "",
     repeat_only: bool = False,
 ):
-    query = build_customer_query(search, provinsi, kota, affiliate, repeat_only)
+    query = build_customer_query(search, provinsi, kota, affiliate, repeat_only, label)
     docs = await db.customers.find(query).sort("last_seen", -1).to_list(5000)
     rows = []
     for d in docs:
         row = {}
-        for key, label in EXPORT_COLUMNS:
+        for key, label_col in EXPORT_COLUMNS:
             val = d.get(key, "")
             if key == "is_repeat":
                 val = "Ya" if d.get("is_repeat") else "Tidak"
-            row[label] = val
+            elif key == "labels":
+                val = ", ".join(d.get("labels", []) or [])
+            row[label_col] = val
         rows.append(row)
 
     import pandas as pd
@@ -671,6 +705,8 @@ async def update_customer(customer_id: str, body: CustomerUpdate, user: dict = D
         "kota": body.kota,
         "provinsi": body.provinsi,
         "negara": body.negara,
+        "note": body.note,
+        "labels": body.labels or [],
     }
     await db.customers.update_one({"_id": oid}, {"$set": update})
     return {"id": customer_id, **update}

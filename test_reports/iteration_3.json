@@ -1,0 +1,26 @@
+{
+  "summary": "Iteration 3 tested: (1) GET /api/stats/regions?by=provinsi|kota returns [{name,count,orders}] sorted desc, empty/None regions excluded; (2) PUT /api/customers/{id} persists note and labels arrays, GET returns them; (3) label filter param filters correctly, /api/customers/filters returns distinct 'labels' list; (4) CSV/XLSX export includes 'Label' (comma-joined) and 'Catatan' columns and respects label filter; (5) POST /api/extract rejects >60 with 400, accepts empty->400, 2 tiny images returns per-image results with fields+confidence. Backend: 11/11 pytest tests pass. Frontend Playwright: owner login->Database, toggle-regions-button reveals regions-panel, region-by-provinsi/kota switches work; filter-label dropdown lists {'', Langganan, Reseller, VIP}, filtering by VIP narrows to 2 rows; edit-customer opens modal, edit-label-VIP/Reseller toggles work, edit-field-note saves 'UI-test-note-iter3', edit-save-button persists, reopen shows note preserved and toggled-off labels; Upload flow: uploading 6 tiny PNGs triggers extraction-progress bar showing 'Mengekstrak antrean... 0/6' and processes in chunks of 5 (2 backend calls), then renders quick-correct-table with 6 review-row-i rows. All 4 new features working end-to-end.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3_features.py",
+    "/app/backend/tests/test_database_features.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_iter3.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PUT /api/customers/{id} still overwrites all fields with defaults; if UI ever sends partial body, note/labels/other strings would be wiped. Current UI spreads full customer object so it's fine, but a partial-update contract would be safer.",
+    "Frontend Database.js is now 604 lines and holds fetching/filters/regions/history/edit/delete. Consider extracting EditModal, HistoryDrawer, RegionsPanel into their own components for maintainability (non-blocking).",
+    "extract endpoint uses asyncio.Semaphore(5) - matches frontend CHUNK=5 which is fine. Note that 60-image cap is enforced only by count; no per-image size cap. Could OOM on many huge b64 payloads. Consider a total-bytes cap or per-image size limit (non-blocking).",
+    "customer_orders/update/delete handlers use to_oid() to catch invalid ObjectIds and return 404 - good, already addressed in prior iteration.",
+    "region_stats limits to 12 items - reasonable for chart display but not documented; frontend chart height math (regions.length*38) assumes this cap."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration3_features.py"],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100%"},
+  "test_credentials": "Owner: owner@petapembeli.id / Pemilik123!",
+  "seed_data_creation": "Created TEST_LabelBuyer (+6285711220033) in TEST_KotaIT3/TEST_ProvIT3 with note+labels via pytest. UI test toggled its labels off (labels now empty, note = 'UI-test-note-iter3'). Prior iteration residues (TEST_ExpBuyer_Updated, TEST_Clasher, TEST_Reg) still present. Main agent should clean TEST_ prefixed customers.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run backend tests serially with `-o addopts=''` to bypass xdist. AI extract with tiny 1x1 PNGs returns empty fields but valid schema in ~1-2s (fast). Full-image AI extract with real screenshots takes 10-30s per batch of 5. Region stats endpoint caps at 12 groups."
+}
