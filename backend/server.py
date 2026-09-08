@@ -13,10 +13,12 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Annotated
 
+import io
 import jwt
 import bcrypt
 from bson import ObjectId
 from fastapi import FastAPI, APIRouter, Request, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, BeforeValidator, ConfigDict, EmailStr
@@ -282,6 +284,20 @@ class OperatorCreate(BaseModel):
     name: str = ""
 
 
+class CustomerUpdate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    recipient_name: str = ""
+    tiktok_username: str = ""
+    phone: str = ""
+    affiliate_creator: str = ""
+    address_detail: str = ""
+    kelurahan: str = ""
+    kecamatan: str = ""
+    kota: str = ""
+    provinsi: str = ""
+    negara: str = ""
+
+
 # ---------------------------------------------------------------------------
 # Routes: Auth
 # ---------------------------------------------------------------------------
@@ -464,15 +480,14 @@ async def save_customers(body: SaveRequest, user: dict = Depends(get_current_use
     return {"saved": saved, "new_customers": new_customers, "repeat_customers": repeat_customers, "skipped": skipped}
 
 
-@api_router.get("/customers")
-async def list_customers(
-    user: dict = Depends(get_current_user),
-    search: str = "",
-    provinsi: str = "",
-    kota: str = "",
-    affiliate: str = "",
-    repeat_only: bool = False,
-):
+def to_oid(customer_id: str) -> ObjectId:
+    try:
+        return ObjectId(customer_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan")
+
+
+def build_customer_query(search: str, provinsi: str, kota: str, affiliate: str, repeat_only: bool) -> dict:
     query = {}
     if search:
         rx = {"$regex": re.escape(search), "$options": "i"}
@@ -489,7 +504,19 @@ async def list_customers(
         query["affiliate_creator"] = affiliate
     if repeat_only:
         query["is_repeat"] = True
+    return query
 
+
+@api_router.get("/customers")
+async def list_customers(
+    user: dict = Depends(get_current_user),
+    search: str = "",
+    provinsi: str = "",
+    kota: str = "",
+    affiliate: str = "",
+    repeat_only: bool = False,
+):
+    query = build_customer_query(search, provinsi, kota, affiliate, repeat_only)
     docs = await db.customers.find(query).sort("last_seen", -1).to_list(2000)
     out = []
     for d in docs:
@@ -527,6 +554,137 @@ async def stats(user: dict = Depends(get_current_user)):
     repeat = await db.customers.count_documents({"is_repeat": True})
     orders = await db.orders.count_documents({})
     return {"total_customers": total, "repeat_customers": repeat, "total_orders": orders}
+
+
+EXPORT_COLUMNS = [
+    ("recipient_name", "Nama Penerima"),
+    ("tiktok_username", "Username TikTok"),
+    ("phone", "No. HP"),
+    ("address_detail", "Alamat Detail"),
+    ("kelurahan", "Kelurahan"),
+    ("kecamatan", "Kecamatan"),
+    ("kota", "Kota/Kabupaten"),
+    ("provinsi", "Provinsi"),
+    ("negara", "Negara"),
+    ("affiliate_creator", "Kreator Afiliasi"),
+    ("order_count", "Total Pesanan"),
+    ("is_repeat", "Pembeli Berulang"),
+    ("first_seen", "Pesanan Pertama"),
+    ("last_seen", "Pesanan Terakhir"),
+]
+
+
+@api_router.get("/customers/export")
+async def export_customers(
+    user: dict = Depends(get_current_user),
+    format: str = "xlsx",
+    search: str = "",
+    provinsi: str = "",
+    kota: str = "",
+    affiliate: str = "",
+    repeat_only: bool = False,
+):
+    query = build_customer_query(search, provinsi, kota, affiliate, repeat_only)
+    docs = await db.customers.find(query).sort("last_seen", -1).to_list(5000)
+    rows = []
+    for d in docs:
+        row = {}
+        for key, label in EXPORT_COLUMNS:
+            val = d.get(key, "")
+            if key == "is_repeat":
+                val = "Ya" if d.get("is_repeat") else "Tidak"
+            row[label] = val
+        rows.append(row)
+
+    import pandas as pd
+    df = pd.DataFrame(rows, columns=[label for _, label in EXPORT_COLUMNS])
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
+
+    if format == "csv":
+        buf = io.StringIO()
+        df.to_csv(buf, index=False)
+        data = buf.getvalue().encode("utf-8-sig")
+        return StreamingResponse(
+            io.BytesIO(data),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="database_pelanggan_{ts}.csv"'},
+        )
+
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Pelanggan")
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="database_pelanggan_{ts}.xlsx"'},
+    )
+
+
+@api_router.get("/customers/{customer_id}/orders")
+async def customer_orders(customer_id: str, user: dict = Depends(get_current_user)):
+    oid = to_oid(customer_id)
+    cust = await db.customers.find_one({"_id": oid})
+    if not cust:
+        raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan")
+    docs = await db.orders.find({"customer_id": customer_id}).sort("captured_at", -1).to_list(1000)
+    orders = [{
+        "id": str(d["_id"]),
+        "order_id": d.get("order_id", ""),
+        "created_at": d.get("created_at", ""),
+        "full_address_raw": d.get("full_address_raw", ""),
+        "affiliate_creator": d.get("affiliate_creator", ""),
+        "captured_at": d.get("captured_at", ""),
+        "captured_by": d.get("captured_by", ""),
+    } for d in docs]
+    return {
+        "customer": {
+            "id": str(cust["_id"]),
+            "recipient_name": cust.get("recipient_name", ""),
+            "tiktok_username": cust.get("tiktok_username", ""),
+            "phone": cust.get("phone", ""),
+        },
+        "orders": orders,
+    }
+
+
+@api_router.put("/customers/{customer_id}")
+async def update_customer(customer_id: str, body: CustomerUpdate, user: dict = Depends(get_current_user)):
+    oid = to_oid(customer_id)
+    cust = await db.customers.find_one({"_id": oid})
+    if not cust:
+        raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan")
+    new_phone = normalize_phone(body.phone)
+    if not new_phone:
+        raise HTTPException(status_code=400, detail="Nomor HP wajib diisi")
+    clash = await db.customers.find_one({"phone": new_phone, "_id": {"$ne": oid}})
+    if clash:
+        raise HTTPException(status_code=400, detail="Nomor HP sudah digunakan pelanggan lain")
+    update = {
+        "recipient_name": body.recipient_name,
+        "tiktok_username": body.tiktok_username,
+        "phone": new_phone,
+        "affiliate_creator": body.affiliate_creator,
+        "address_detail": body.address_detail,
+        "kelurahan": body.kelurahan,
+        "kecamatan": body.kecamatan,
+        "kota": body.kota,
+        "provinsi": body.provinsi,
+        "negara": body.negara,
+    }
+    await db.customers.update_one({"_id": oid}, {"$set": update})
+    return {"id": customer_id, **update}
+
+
+@api_router.delete("/customers/{customer_id}")
+async def delete_customer(customer_id: str, user: dict = Depends(get_current_user)):
+    oid = to_oid(customer_id)
+    cust = await db.customers.find_one({"_id": oid})
+    if not cust:
+        raise HTTPException(status_code=404, detail="Pelanggan tidak ditemukan")
+    await db.orders.delete_many({"customer_id": customer_id})
+    await db.customers.delete_one({"_id": oid})
+    return {"deleted": True, "id": customer_id}
 
 
 # ---------------------------------------------------------------------------
